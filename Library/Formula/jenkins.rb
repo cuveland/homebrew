@@ -1,58 +1,53 @@
-require 'formula'
-
 class Jenkins < Formula
-  url 'http://mirrors.jenkins-ci.org/war/1.428/jenkins.war', :using => :nounzip
-  head 'git://github.com/jenkinsci/jenkins.git'
-  version '1.428'
-  md5 '5817e09ccc3a2996addeb8f1bc1cb6c8'
-  homepage 'http://jenkins-ci.org'
+  homepage "https://jenkins-ci.org"
+  url "http://mirrors.jenkins-ci.org/war/1.598/jenkins.war"
+  sha1 "ee3f94a2eab93a119baaa897a2fd0045cc401e73"
+
+  head do
+    url "https://github.com/jenkinsci/jenkins.git"
+    depends_on "maven" => :build
+  end
+
+  depends_on :java => "1.6+"
 
   def install
-    system "mvn clean install -pl war -am -DskipTests && mv war/target/jenkins.war ." if ARGV.build_head?
-    lib.install "jenkins.war"
-    (prefix+'org.jenkins-ci.plist').write startup_plist
-    (prefix+'org.jenkins-ci.plist').chmod 0644
+    if build.head?
+      system "mvn", "clean", "install", "-pl", "war", "-am", "-DskipTests"
+    else
+      system "jar", "xvf", "jenkins.war"
+    end
+    libexec.install Dir["**/jenkins.war", "**/jenkins-cli.jar"]
+    bin.write_jar_script libexec/"jenkins.war", "jenkins"
+    bin.write_jar_script libexec/"jenkins-cli.jar", "jenkins-cli"
   end
 
-  def caveats; <<-EOS
-If this is your first install, automatically load on login with:
-    mkdir -p ~/Library/LaunchAgents
-    cp #{prefix}/org.jenkins-ci.plist ~/Library/LaunchAgents/
-    launchctl load -w ~/Library/LaunchAgents/org.jenkins-ci.plist
+  plist_options :manual => "jenkins"
 
-If this is an upgrade and you already have the org.jenkins-ci.plist loaded:
-    launchctl unload -w ~/Library/LaunchAgents/org.jenkins-ci.plist
-    cp #{prefix}/org.jenkins-ci.plist ~/Library/LaunchAgents/
-    launchctl load -w ~/Library/LaunchAgents/org.jenkins-ci.plist
-
-Or start it manually:
-    java -jar #{lib}/jenkins.war
-EOS
+  def plist; <<-EOS.undent
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+      <dict>
+        <key>Label</key>
+        <string>#{plist_name}</string>
+        <key>ProgramArguments</key>
+        <array>
+          <string>/usr/bin/java</string>
+          <string>-Dmail.smtp.starttls.enable=true</string>
+          <string>-jar</string>
+          <string>#{opt_libexec}/jenkins.war</string>
+          <string>--httpListenAddress=127.0.0.1</string>
+          <string>--httpPort=8080</string>
+        </array>
+        <key>RunAtLoad</key>
+        <true/>
+      </dict>
+    </plist>
+  EOS
   end
 
-  # There is a startup plist, as well as a runner, here and here:
-  #  https://raw.github.com/jenkinsci/jenkins/master/osx/org.jenkins-ci.plist
-  #  https://raw.github.com/jenkinsci/jenkins/master/osx/Library/Application%20Support/Jenkins/jenkins-runner.sh
-  #
-  # Perhaps they could be integrated.
-  def startup_plist
-    return <<-EOS
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>Jenkins</string>
-    <key>ProgramArguments</key>
-    <array>
-    <string>/usr/bin/java</string>
-    <string>-jar</string>
-    <string>#{lib}/jenkins.war</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-</dict>
-</plist>
-EOS
+  def caveats; <<-EOS.undent
+    Note: When using launchctl the port will be 8080.
+    EOS
   end
 end

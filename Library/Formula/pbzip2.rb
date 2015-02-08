@@ -1,21 +1,21 @@
 require 'formula'
 
 class Pbzip2 < Formula
-  url 'http://compression.ca/pbzip2/pbzip2-1.1.4.tar.gz'
   homepage 'http://compression.ca/pbzip2/'
-  md5 '797e3ae5c6293a55e3e97fefb11cf494'
+  url 'http://compression.ca/pbzip2/pbzip2-1.1.8.tar.gz'
+  sha1 '6957483690f00c33ffeabbe0e9e6475098820cd5'
 
-  fails_with_llvm
+  fails_with :llvm do
+    build 2334
+  end
 
   def install
-    inreplace "Makefile" do |s|
-      s.change_make_var! 'PREFIX', prefix
-      s.gsub! "/man/", "/share/man/"
+    inreplace "Makefile", "$(PREFIX)/man", "$(PREFIX)/share/man"
 
-      # Per fink and macport:
-      s.gsub! "-pthread -lpthread", ""
-    end
-
-    system "make install"
+    system "make", "PREFIX=#{prefix}",
+                   "CC=#{ENV.cxx}",
+                   "CFLAGS=#{ENV.cflags}",
+                   "PREFIX=#{prefix}",
+                   "install"
   end
 end

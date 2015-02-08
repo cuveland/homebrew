@@ -1,84 +1,92 @@
-require 'formula'
+require "formula"
 
 class Graphviz < Formula
-  url 'http://www.graphviz.org/pub/graphviz/stable/SOURCES/graphviz-2.28.0.tar.gz'
-  md5 '8d26c1171f30ca3b1dc1b429f7937e58'
-  homepage 'http://graphviz.org/'
+  homepage "http://graphviz.org/"
+  url "http://graphviz.org/pub/graphviz/stable/SOURCES/graphviz-2.38.0.tar.gz"
+  sha1 "053c771278909160916ca5464a0a98ebf034c6ef"
 
-  depends_on 'pkg-config' => :build
-
-  if ARGV.include? '--with-pdf'
-    depends_on 'pango'
-    depends_on 'cairo' if MacOS.leopard? or MacOS.lion?
-    depends_on 'gd' if MacOS.lion?
+  bottle do
+    revision 1
+    sha1 "a3461628baba501e16c63ceaa0414027f7e26c7f" => :yosemite
+    sha1 "dc7f915d199931a49fb2a8eb623b329fed6c619c" => :mavericks
+    sha1 "ec730f7cdd3e9549610960ecab86dac349e2f8ea" => :mountain_lion
   end
 
-  def options
-    [["--with-pdf", "Build with Pango/Cairo to support native PDF output"]]
+  # To find Ruby and Co.
+  env :std
+
+  option :universal
+  option "with-bindings", "Build Perl/Python/Ruby/etc. bindings"
+  option "with-pango", "Build with Pango/Cairo for alternate PDF output"
+  option "with-app", "Build GraphViz.app (requires full XCode install)"
+  option "with-gts", "Build with GNU GTS support (required by prism)"
+
+  deprecated_option "with-x" => "with-x11"
+  deprecated_option "with-pangocairo" => "with-pango"
+
+  depends_on "pkg-config" => :build
+  depends_on :xcode => :build if build.with? "app"
+  depends_on "pango" => :optional
+  depends_on "gts" => :optional
+  depends_on "librsvg" => :optional
+  depends_on "freetype" => :optional
+  depends_on :x11 => :optional
+  depends_on "libpng"
+
+  if build.with? "bindings"
+    depends_on "swig" => :build
+    depends_on :python
   end
 
-  def patches
-    # fix build on platforms without /usr/lib/libltdl.a (i.e., Lion)
-    # http://www.graphviz.org/mantisbt/view.php?id=2109
-    # fixed in upstream development version 2.29
-    DATA if MacOS.lion?
+  fails_with :clang do
+    build 318
+  end
+
+  patch :p0 do
+    url "https://trac.macports.org/export/103168/trunk/dports/graphics/graphviz/files/patch-project.pbxproj.diff"
+    sha1 "b242fb8fa81489dd16830e5df6bbf5448a3874d5"
   end
 
   def install
-    ENV.x11
-    # Various language bindings fail with 32/64 issues.
-    system "./configure", "--disable-debug", "--disable-dependency-tracking",
-                          "--prefix=#{prefix}",
-                          "--with-qt=no",
-                          "--disable-quartz",
-                          "--disable-java",
-                          "--disable-ocaml",
-                          "--disable-perl",
-                          "--disable-php",
-                          "--disable-python",
-                          "--disable-r",
-                          "--disable-ruby",
-                          "--disable-sharp",
-                          "--disable-swig"
-    system "make install"
+    ENV.universal_binary if build.universal?
+    args = ["--disable-debug",
+            "--disable-dependency-tracking",
+            "--prefix=#{prefix}",
+            "--without-qt",
+            "--with-quartz"]
+    args << "--with-gts" if build.with? "gts"
+    args << "--disable-swig" if build.without? "bindings"
+    args << "--without-pangocairo" if build.without? "pango"
+    args << "--without-freetype2" if build.without? "freetype"
+    args << "--without-x" if build.without? "x11"
+    args << "--without-rsvg" if build.without? "librsvg"
+
+    if build.with? "bindings"
+      # http://www.graphviz.org/mantisbt/view.php?id=2486
+      inreplace "configure", 'PYTHON_LIBS="-lpython$PYTHON_VERSION_SHORT"',
+                             'PYTHON_LIBS="-L$PYTHON_PREFIX/lib -lpython$PYTHON_VERSION_SHORT"'
+    end
+
+    system "./configure", *args
+    system "make", "install"
+
+    if build.with? "app"
+      cd "macosx" do
+        xcodebuild "-configuration", "Release", "SYMROOT=build", "PREFIX=#{prefix}", "ONLY_ACTIVE_ARCH=YES"
+      end
+      prefix.install "macosx/build/Release/Graphviz.app"
+    end
+
+    (bin+"gvmap.sh").unlink
   end
 
-  def test
-    mktemp do
-      p = Pathname.new Dir.pwd
-      (p+'sample.dot').write <<-EOS.undent
-      digraph G {
-        a -> b
-      }
-      EOS
+  test do
+    (testpath/"sample.dot").write <<-EOS.undent
+    digraph G {
+      a -> b
+    }
+    EOS
 
-      system "#{bin}/dot -Tpdf -o sample.pdf sample.dot && /usr/bin/open ./sample.pdf && /bin/sleep 3"
-    end
+    system "#{bin}/dot", "-Tpdf", "-o", "sample.pdf", "sample.dot"
   end
 end
-
-__END__
-diff --git a/lib/gvc/Makefile.in b/lib/gvc/Makefile.in
-index 2d345a0..67183f2 100644
---- a/lib/gvc/Makefile.in
-+++ b/lib/gvc/Makefile.in
-@@ -41,8 +41,7 @@ host_triplet = @host@
- @WITH_WIN32_TRUE@am__append_1 = -O0
- @WITH_ORTHO_TRUE@am__append_2 = $(top_builddir)/lib/ortho/libortho_C.la
- @WITH_ORTHO_TRUE@am__append_3 = $(top_builddir)/lib/ortho/libortho_C.la
--@ENABLE_LTDL_TRUE@am__append_4 = $(LIBLTDL) $(LIBLTDL_LDFLAGS)
--@ENABLE_LTDL_TRUE@am__append_5 = $(LIBLTDL)
-+@ENABLE_LTDL_TRUE@am__append_4 = @LIBLTDL@ $(LIBLTDL_LDFLAGS)
- subdir = lib/gvc
- DIST_COMMON = $(noinst_HEADERS) $(pkginclude_HEADERS) \
- 	$(srcdir)/Makefile.am $(srcdir)/Makefile.in \
-@@ -87,8 +86,7 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(man3dir)" \
- 	"$(DESTDIR)$(pkgincludedir)"
- LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
- am__DEPENDENCIES_1 =
--@ENABLE_LTDL_TRUE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) \
--@ENABLE_LTDL_TRUE@	$(am__DEPENDENCIES_1)
-+@ENABLE_LTDL_TRUE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
- am__DEPENDENCIES_3 = $(top_builddir)/lib/pack/libpack_C.la \
- 	$(top_builddir)/lib/xdot/libxdot_C.la \
- 	$(top_builddir)/lib/common/libcommon_C.la $(am__append_2) \

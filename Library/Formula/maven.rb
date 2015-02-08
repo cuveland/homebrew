@@ -1,25 +1,45 @@
 require 'formula'
 
 class Maven < Formula
-  url 'http://www.apache.org/dyn/closer.cgi?path=maven/binaries/apache-maven-3.0.3-bin.tar.gz'
   homepage 'http://maven.apache.org/'
-  md5 '507828d328eb3735103c0492443ef0f0'
+  url 'http://www.apache.org/dyn/closer.cgi?path=maven/maven-3/3.2.5/binaries/apache-maven-3.2.5-bin.tar.gz'
+  sha1 '41009327d5494e0e8970b25b77ffed8934cd7ca1'
 
   def install
     # Remove windows files
     rm_f Dir["bin/*.bat"]
 
     # Fix the permissions on the global settings file.
-    chmod 0644, Dir["conf/settings.xml"]
+    chmod 0644, 'conf/settings.xml'
 
-    # Install jars in libexec to avoid conflicts
-    prefix.install %w{ NOTICE.txt LICENSE.txt README.txt }
+    prefix.install_metafiles
     libexec.install Dir['*']
 
-    # Symlink binaries
-    bin.mkpath
-    ln_s "#{libexec}/bin/mvn", bin+"mvn"
-    ln_s "#{libexec}/bin/mvnDebug", bin+"mvnDebug"
-    ln_s "#{libexec}/bin/mvnyjp", bin+"mvnyjp"
+    # Leave conf file in libexec. The mvn symlink will be resolved and the conf
+    # file will be found relative to it
+    bin.install_symlink Dir["#{libexec}/bin/*"] - ["#{libexec}/bin/m2.conf"]
   end
+
+  test do
+    (testpath/'pom.xml').write <<-EOS.undent
+      <?xml version="1.0" encoding="UTF-8"?>
+      <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+        <modelVersion>4.0.0</modelVersion>
+        <groupId>org.homebrew</groupId>
+        <artifactId>maven-test</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+      </project>
+    EOS
+    (testpath/'src/main/java/org/homebrew/MavenTest.java').write <<-EOS.undent
+      package org.homebrew;
+      public class MavenTest {
+        public static void main(String[] args) {
+          System.out.println("Testing Maven with Homebrew!");
+        }
+      }
+    EOS
+    system "#{bin}/mvn", 'compile'
+  end
+
 end

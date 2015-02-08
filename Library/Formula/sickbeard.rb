@@ -1,82 +1,77 @@
-require 'formula'
+require "formula"
 
 class Sickbeard < Formula
-  url 'https://github.com/midgetspy/Sick-Beard/tarball/build-488'
-  homepage 'http://www.sickbeard.com/'
-  md5 '3bdcabe963e2622513f3cca2757fa2f0'
+  homepage "http://www.sickbeard.com/"
+  head "https://github.com/midgetspy/Sick-Beard.git"
+  url "https://github.com/midgetspy/Sick-Beard/archive/build-507.tar.gz"
+  sha1 "c7939a58f38d55e1db6a732047c37eb31588cc7d"
 
-  head 'git://github.com/midgetspy/Sick-Beard.git'
-
-  depends_on 'Cheetah' => :python
-
-  def install
-    prefix.install Dir['*']
-    bin.mkpath
-    (bin+"sickbeard").write(startup_script)
-    (prefix+"com.sickbeard.sickbeard.plist").write(startup_plist)
-    (prefix+"com.sickbeard.sickbeard.plist").chmod 0644
+  bottle do
+    sha1 "d144a55f9a667036255b373f7fcf294455d447e2" => :yosemite
+    sha1 "2c47e5cec2a12f46f57cff89f29cb34f14b72183" => :mavericks
+    sha1 "1a2abb4fcbae529e5c378d5ca75f506c726a8a0b" => :mountain_lion
   end
 
-  def startup_plist; <<-EOS.undent
+  resource "Markdown" do
+    url "https://pypi.python.org/packages/source/M/Markdown/Markdown-2.4.1.tar.gz"
+    sha1 "2c9cedad000e9ecdf0b220bd1ad46bc4592d067e"
+  end
+
+  resource "Cheetah" do
+    url "https://pypi.python.org/packages/source/C/Cheetah/Cheetah-2.4.4.tar.gz"
+    sha1 "c218f5d8bc97b39497680f6be9b7bd093f696e89"
+  end
+
+  def install
+    # TODO - strip down to the minimal install
+    prefix.install_metafiles
+    libexec.install Dir["*"]
+
+    ENV["CHEETAH_INSTALL_WITHOUT_SETUPTOOLS"] = "1"
+    ENV.prepend_create_path "PYTHONPATH", libexec+"lib/python2.7/site-packages"
+    install_args = [ "setup.py", "install", "--prefix=#{libexec}" ]
+
+    resource("Markdown").stage { system "python", *install_args }
+    resource("Cheetah").stage { system "python", *install_args }
+
+    (bin+"sickbeard").write(startup_script)
+  end
+
+  plist_options :manual => "sickbeard"
+
+  def plist; <<-EOS.undent
     <?xml version="1.0" encoding="UTF-8"?>
     <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
     <plist version="1.0">
     <dict>
       <key>Label</key>
-      <string>com.sickbeard.sickbeard</string>
+      <string>#{plist_name}</string>
       <key>ProgramArguments</key>
       <array>
-           <string>#{bin}/sickbeard</string>
-           <string>-q</string>
-           <string>--nolaunch</string>
-           <string>-p</string>
-           <string>8081</string>
+        <string>#{opt_bin}/sickbeard</string>
+        <string>-q</string>
+        <string>--nolaunch</string>
+        <string>-p</string>
+        <string>8081</string>
       </array>
       <key>RunAtLoad</key>
       <true/>
-      <key>UserName</key>
-      <string>#{`whoami`.chomp}</string>
     </dict>
     </plist>
     EOS
   end
 
   def startup_script; <<-EOS.undent
-    #!/usr/bin/env ruby
-
-    me = begin
-      File.expand_path(
-        File.join(
-          File.dirname(__FILE__),
-          File.readlink(__FILE__)
-        )
-      )
-    rescue
-      __FILE__
-    end
-
-    path = File.join(File.dirname(me), '..', 'SickBeard.py')
-    args = ["--pidfile=#{var}/run/sickbeard.pid", "--datadir=#{etc}/sickbeard"]
-
-    exec("python", path, *(args + ARGV))
+    #!/bin/bash
+    export PYTHONPATH="#{libexec}/lib/python2.7/site-packages:$PYTHONPATH"
+    python "#{libexec}/SickBeard.py"\
+           "--pidfile=#{var}/run/sickbeard.pid"\
+           "--datadir=#{etc}/sickbeard"\
+           "$@"
     EOS
   end
 
-  def caveats; <<-EOS.undent
-    SickBeard will start up and launch http://localhost:8081/ when you run:
-
-        sickbeard
-
-    To launch automatically on startup, copy and paste the following into a terminal:
-
-        mkdir -p ~/Library/LaunchAgents
-        (launchctl unload -w ~/Library/LaunchAgents/com.sickbeard.sickbeard.plist 2>/dev/null || true)
-        ln -sf #{prefix}/com.sickbeard.sickbeard.plist ~/Library/LaunchAgents/com.sickbeard.sickbeard.plist
-        launchctl load -w ~/Library/LaunchAgents/com.sickbeard.sickbeard.plist
-
-    You may want to edit:
-      #{prefix}/com.sickbeard.sickbeard.plist
-    to change the port (default: 8081) or user (default: #{`whoami`.chomp}).
-    EOS
+  def caveats
+    "SickBeard defaults to port 8081."
   end
 end

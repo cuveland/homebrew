@@ -1,86 +1,76 @@
-require 'formula'
-
 class Redis < Formula
-  url 'http://redis.googlecode.com/files/redis-2.2.13.tar.gz'
-  head 'https://github.com/antirez/redis.git'
-  homepage 'http://redis.io/'
-  md5 '7be678bbfcac9dc152e75d080d239729'
+  homepage "http://redis.io/"
+  url "http://download.redis.io/releases/redis-2.8.19.tar.gz"
+  sha1 "3e362f4770ac2fdbdce58a5aa951c1967e0facc8"
 
-  fails_with_llvm 'Fails with "reference out of range from _linenoise"', :build => 2334
+  bottle do
+    sha1 "ba238ce5e71f5c0c3cb997ebda0cf594f75e8069" => :yosemite
+    sha1 "0902233ed41683e22a1ecd8010f2875c9b0b9dba" => :mavericks
+    sha1 "4b8100b40edd0e6ef695e28bf4fd30360939c3f3" => :mountain_lion
+  end
+
+  head "https://github.com/antirez/redis.git", :branch => "unstable"
+
+  fails_with :llvm do
+    build 2334
+    cause "Fails with \"reference out of range from _linenoise\""
+  end
 
   def install
     # Architecture isn't detected correctly on 32bit Snow Leopard without help
-    ENV["OBJARCH"] = MacOS.prefer_64_bit? ? "-arch x86_64" : "-arch i386"
+    ENV["OBJARCH"] = "-arch #{MacOS.preferred_arch}"
 
     # Head and stable have different code layouts
-    src = File.exists?('src/Makefile') ? 'src' : '.'
-    system "make -C #{src}"
+    src = (buildpath/"src/Makefile").exist? ? buildpath/"src" : buildpath
+    system "make", "-C", src, "CC=#{ENV.cc}"
 
-    %w( redis-benchmark redis-cli redis-server redis-check-dump redis-check-aof ).each { |p|
-      bin.install "#{src}/#{p}" rescue nil
-    }
-
-    %w( run db/redis log ).each { |p| (var+p).mkpath }
+    %w[benchmark cli server check-dump check-aof sentinel].each { |p| bin.install src/"redis-#{p}" }
+    %w[run db/redis log].each { |p| (var+p).mkpath }
 
     # Fix up default conf file to match our paths
     inreplace "redis.conf" do |s|
       s.gsub! "/var/run/redis.pid", "#{var}/run/redis.pid"
       s.gsub! "dir ./", "dir #{var}/db/redis/"
+      s.gsub! "\# bind 127.0.0.1", "bind 127.0.0.1"
     end
 
-    doc.install Dir["doc/*"]
     etc.install "redis.conf"
-    (prefix+'io.redis.redis-server.plist').write startup_plist
-    (prefix+'io.redis.redis-server.plist').chmod 0644
+    etc.install "sentinel.conf" => "redis-sentinel.conf"
   end
 
-  def caveats
-    <<-EOS.undent
-    If this is your first install, automatically load on login with:
-        mkdir -p ~/Library/LaunchAgents
-        cp #{prefix}/io.redis.redis-server.plist ~/Library/LaunchAgents/
-        launchctl load -w ~/Library/LaunchAgents/io.redis.redis-server.plist
+  plist_options :manual => "redis-server #{HOMEBREW_PREFIX}/etc/redis.conf"
 
-    If this is an upgrade and you already have the io.redis.redis-server.plist loaded:
-        launchctl unload -w ~/Library/LaunchAgents/io.redis.redis-server.plist
-        cp #{prefix}/io.redis.redis-server.plist ~/Library/LaunchAgents/
-        launchctl load -w ~/Library/LaunchAgents/io.redis.redis-server.plist
-
-      To start redis manually:
-        redis-server #{etc}/redis.conf
-
-      To access the server:
-        redis-cli
+  def plist; <<-EOS.undent
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+      <dict>
+        <key>KeepAlive</key>
+        <dict>
+          <key>SuccessfulExit</key>
+          <false/>
+        </dict>
+        <key>Label</key>
+        <string>#{plist_name}</string>
+        <key>ProgramArguments</key>
+        <array>
+          <string>#{opt_bin}/redis-server</string>
+          <string>#{etc}/redis.conf</string>
+        </array>
+        <key>RunAtLoad</key>
+        <true/>
+        <key>WorkingDirectory</key>
+        <string>#{var}</string>
+        <key>StandardErrorPath</key>
+        <string>#{var}/log/redis.log</string>
+        <key>StandardOutPath</key>
+        <string>#{var}/log/redis.log</string>
+      </dict>
+    </plist>
     EOS
   end
 
-  def startup_plist
-    return <<-EOPLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-  <dict>
-    <key>KeepAlive</key>
-    <true/>
-    <key>Label</key>
-    <string>io.redis.redis-server</string>
-    <key>ProgramArguments</key>
-    <array>
-      <string>#{bin}/redis-server</string>
-      <string>#{etc}/redis.conf</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>UserName</key>
-    <string>#{`whoami`.chomp}</string>
-    <key>WorkingDirectory</key>
-    <string>#{var}</string>
-    <key>StandardErrorPath</key>
-    <string>#{var}/log/redis.log</string>
-    <key>StandardOutPath</key>
-    <string>#{var}/log/redis.log</string>
-  </dict>
-</plist>
-    EOPLIST
+  test do
+    system "#{bin}/redis-server", "--test-memory", "2"
   end
 end

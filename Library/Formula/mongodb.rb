@@ -1,141 +1,128 @@
-require 'formula'
-require 'hardware'
+require "formula"
 
 class Mongodb < Formula
-  homepage 'http://www.mongodb.org/'
+  homepage "https://www.mongodb.org/"
 
-  packages = {
-    :x86_64 => {
-      :url => 'http://fastdl.mongodb.org/osx/mongodb-osx-x86_64-2.0.0.tgz',
-      :md5 => '01776ae81c9bf12708f8a4f8a2d8c28e',
-      :version => '2.0.0-x86_64'
-    },
-    :i386 => {
-      :url => 'http://fastdl.mongodb.org/osx/mongodb-osx-i386-2.0.0.tgz',
-      :md5 => '0a93663d1ceaed9fc99979ef17fbe32d',
-      :version => '2.0.0-i386'
-    }
-  }
+  url "https://fastdl.mongodb.org/src/mongodb-src-r2.6.7.tar.gz"
+  sha1 "c11c9d31063f2fc126249f7580e8417a8f4ef2b5"
 
-  package = (Hardware.is_64_bit? and not ARGV.include? '--32bit') ? packages[:x86_64] : packages[:i386]
+  bottle do
+    sha1 "4b1749b645a744b38b4959daac46bf80353e3b32" => :yosemite
+    sha1 "95725282b89443fafcdc0974e60b10bd295b48ee" => :mavericks
+    sha1 "2da546a136e48a5f9dc86287c329b5741b77bd14" => :mountain_lion
+  end
 
-  url     package[:url]
-  md5     package[:md5]
-  version package[:version]
+  devel do
+    # This can't be bumped past 2.7.7 until we decide what to do with
+    # https://github.com/Homebrew/homebrew/pull/33652
+    url "https://fastdl.mongodb.org/src/mongodb-src-r2.7.7.tar.gz"
+    sha1 "ce223f5793bdf5b3e1420b0ede2f2403e9f94e5a"
 
-  skip_clean :all
+    # Remove this with the next devel release. Already merged in HEAD.
+    # https://github.com/mongodb/mongo/commit/8b8e90fb
+    patch do
+      url "https://github.com/mongodb/mongo/commit/8b8e90fb.diff"
+      sha1 "9f9ce609c7692930976690cae68aa4fce1f8bca3"
+    end
+  end
 
-  def options
-    [
-        ['--32bit', 'Override arch detection and install the 32-bit version.'],
-        ['--nojournal', 'Disable write-ahead logging (Journaling)'],
-        ['--rest', 'Enable the REST Interface on the HTTP Status Page'],
-    ]
+  option "with-boost", "Compile using installed boost, not the version shipped with mongodb"
+
+  depends_on "boost" => :optional
+  depends_on :macos => :snow_leopard
+  depends_on "scons" => :build
+  depends_on "openssl" => :optional
+
+  # Review this patch with each release.
+  # This modifies the SConstruct file to include 10.10 as an accepted build option.
+  if MacOS.version == :yosemite
+    patch do
+      url "https://raw.githubusercontent.com/DomT4/scripts/fbc0cda/Homebrew_Resources/Mongodb/mongoyosemite.diff"
+      sha1 "f4824e93962154aad375eb29527b3137d07f358c"
+    end
   end
 
   def install
-    # Copy the prebuilt binaries to prefix
-    prefix.install Dir['*']
+    args = %W[
+      --prefix=#{prefix}
+      -j#{ENV.make_jobs}
+      --cc=#{ENV.cc}
+      --cxx=#{ENV.cxx}
+      --osx-version-min=#{MacOS.version}
+    ]
 
-    # Create the data and log directories under /var
-    (var+'mongodb').mkpath
-    (var+'log/mongodb').mkpath
+    # --full installs development headers and client library, not just binaries
+    # (only supported pre-2.7)
+    args << "--full" if build.stable?
+    args << "--use-system-boost" if build.with? "boost"
+    args << "--64" if MacOS.prefer_64_bit?
 
-    # Write the configuration files and launchd script
-    (prefix+'mongod.conf').write mongodb_conf
-    (prefix+'org.mongodb.mongod.plist').write startup_plist
-    (prefix+'org.mongodb.mongod.plist').chmod 0644
+    if build.with? "openssl"
+      args << "--ssl" << "--extrapath=#{Formula["openssl"].opt_prefix}"
+    end
+
+    scons "install", *args
+
+    (buildpath+"mongod.conf").write mongodb_conf
+    etc.install "mongod.conf"
+
+    (var+"mongodb").mkpath
+    (var+"log/mongodb").mkpath
   end
 
-  def caveats
-    s = ""
-    s += <<-EOS.undent
-    If this is your first install, automatically load on login with:
-        mkdir -p ~/Library/LaunchAgents
-        cp #{prefix}/org.mongodb.mongod.plist ~/Library/LaunchAgents/
-        launchctl load -w ~/Library/LaunchAgents/org.mongodb.mongod.plist
-
-    If this is an upgrade and you already have the org.mongodb.mongod.plist loaded:
-        launchctl unload -w ~/Library/LaunchAgents/org.mongodb.mongod.plist
-        cp #{prefix}/org.mongodb.mongod.plist ~/Library/LaunchAgents/
-        launchctl load -w ~/Library/LaunchAgents/org.mongodb.mongod.plist
-
-    Or start it manually:
-        mongod run --config #{prefix}/mongod.conf
+  def mongodb_conf; <<-EOS.undent
+    systemLog:
+      destination: file
+      path: #{var}/log/mongodb/mongo.log
+      logAppend: true
+    storage:
+      dbPath: #{var}/mongodb
+    net:
+      bindIp: 127.0.0.1
     EOS
-
-    if ARGV.include? "--nojournal"
-        s += ""
-        s += <<-EOS.undent
-        Write Ahead logging (Journaling) has been disabled.
-        EOS
-    else
-        s += ""
-        s += <<-EOS.undent
-        MongoDB 1.8+ includes a feature for Write Ahead Logging (Journaling), which has been enabled by default.
-        To disable journaling, use --nojournal.
-        EOS
-    end
-
-    return s
   end
 
-  def mongodb_conf
-    conf = ""
-    conf += <<-EOS.undent
-    # Store data in #{var}/mongodb instead of the default /data/db
-    dbpath = #{var}/mongodb
+  plist_options :manual => "mongod --config #{HOMEBREW_PREFIX}/etc/mongod.conf"
 
-    # Only accept local connections
-    bind_ip = 127.0.0.1
+  def plist; <<-EOS.undent
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+      <key>Label</key>
+      <string>#{plist_name}</string>
+      <key>ProgramArguments</key>
+      <array>
+        <string>#{opt_bin}/mongod</string>
+        <string>--config</string>
+        <string>#{etc}/mongod.conf</string>
+      </array>
+      <key>RunAtLoad</key>
+      <true/>
+      <key>KeepAlive</key>
+      <false/>
+      <key>WorkingDirectory</key>
+      <string>#{HOMEBREW_PREFIX}</string>
+      <key>StandardErrorPath</key>
+      <string>#{var}/log/mongodb/output.log</string>
+      <key>StandardOutPath</key>
+      <string>#{var}/log/mongodb/output.log</string>
+      <key>HardResourceLimits</key>
+      <dict>
+        <key>NumberOfFiles</key>
+        <integer>1024</integer>
+      </dict>
+      <key>SoftResourceLimits</key>
+      <dict>
+        <key>NumberOfFiles</key>
+        <integer>1024</integer>
+      </dict>
+    </dict>
+    </plist>
     EOS
-
-    if ARGV.include? '--nojournal'
-      conf += <<-EOS.undent
-      # Disable Write Ahead Logging
-      nojournal = true
-      EOS
-    end
-
-    if ARGV.include? '--rest'
-        conf += <<-EOS.undent
-        # Enable the REST interface on the HTTP Console (startup port + 1000)
-        rest = true
-        EOS
-    end
-
-    return conf
   end
 
-  def startup_plist
-    return <<-EOS
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>org.mongodb.mongod</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>#{bin}/mongod</string>
-    <string>run</string>
-    <string>--config</string>
-    <string>#{prefix}/mongod.conf</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <false/>
-  <key>UserName</key>
-  <string>#{`whoami`.chomp}</string>
-  <key>WorkingDirectory</key>
-  <string>#{HOMEBREW_PREFIX}</string>
-  <key>StandardErrorPath</key>
-  <string>#{var}/log/mongodb/output.log</string>
-  <key>StandardOutPath</key>
-  <string>#{var}/log/mongodb/output.log</string>
-</dict>
-</plist>
-EOS
+  test do
+    system "#{bin}/mongod", "--sysinfo"
   end
 end

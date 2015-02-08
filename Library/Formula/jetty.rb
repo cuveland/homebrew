@@ -1,25 +1,22 @@
 require 'formula'
 
 class Jetty < Formula
-  url 'http://dist.codehaus.org/jetty/jetty-6.1.26/jetty-6.1.26.zip'
-  homepage 'http://jetty.codehaus.org/jetty/index.html'
-  md5 '0d9b2ae3feb2b207057358142658a11f'
-
-  skip_clean :all
+  homepage "http://www.eclipse.org/jetty/"
+  url "http://download.eclipse.org/jetty/9.2.7.v20150116/dist/jetty-distribution-9.2.7.v20150116.tar.gz"
+  version "9.2.7.v20150116"
+  sha1 "90d3f9ef886696a62bd93012f463d0054282b395"
 
   def install
-    rm_rf Dir['bin/*.{cmd,bat]}']
-
     libexec.install Dir['*']
     (libexec+'logs').mkpath
 
     bin.mkpath
-    Dir["#{libexec}/bin/*.sh"].each do |f|
+    Dir.glob("#{libexec}/bin/*.sh") do |f|
       scriptname = File.basename(f, '.sh')
       (bin+scriptname).write <<-EOS.undent
         #!/bin/bash
         JETTY_HOME=#{libexec}
-        #{f} $@
+        #{f} "$@"
       EOS
       chmod 0755, bin+scriptname
     end

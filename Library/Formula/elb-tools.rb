@@ -1,21 +1,18 @@
-require 'formula'
-
-# Require ec2-api-tools to get the base class
-require "#{File.dirname __FILE__}/ec2-api-tools.rb"
-
 class ElbTools < AmazonWebServicesFormula
-  homepage 'http://developer.amazonwebservices.com/connect/entry.jspa?categoryID=251&externalID=2536'
-  url 'http://ec2-downloads.s3.amazonaws.com/ElasticLoadBalancing.zip'
-  version '1.0.12.0'
-  md5 'fa5a1c4ea6fac6f6ba18b9725bbc6152'
+  homepage "https://aws.amazon.com/developertools/2536"
+  url "https://ec2-downloads.s3.amazonaws.com/ElasticLoadBalancing.zip"
+  version "1.0.35.0"
+  sha1 "976f885c8a437183b2bb0c8127375e5f6371f498"
 
-  depends_on 'ec2-api-tools'
-
-  def install
-    standard_install
-  end
+  depends_on "ec2-api-tools"
 
   def caveats
     standard_instructions "AWS_ELB_HOME"
+  end
+
+  test do
+    ENV["JAVA_HOME"] = `/usr/libexec/java_home`.chomp
+    ENV["AWS_ELB_HOME"] = libexec
+    assert_match version.to_s, shell_output("#{bin}/elb-version")
   end
 end

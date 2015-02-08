@@ -1,12 +1,17 @@
-require 'formula'
-
 class Ack < Formula
-  url "https://github.com/petdance/ack/tarball/1.96"
-  md5 '1cce67a811c52f9d51fb1195c97795f1'
-  homepage 'http://betterthangrep.com/'
+  homepage "http://beyondgrep.com/"
+  url "http://beyondgrep.com/ack-2.14-single-file"
+  sha1 "49c43603420521e18659ce3c50778a4894dd4a5f"
+  version "2.14"
 
   def install
-    bin.install 'ack'
-    (prefix+'etc/bash_completion.d').install 'etc/ack.bash_completion.sh'
+    bin.install "ack-#{version}-single-file" => "ack"
+    system "pod2man", "#{bin}/ack", "ack.1"
+    man1.install "ack.1"
+  end
+
+  test do
+    assert_equal "foo bar\n", pipe_output("#{bin}/ack --noenv --nocolor bar -",
+                                          "foo\nfoo bar\nbaz")
   end
 end

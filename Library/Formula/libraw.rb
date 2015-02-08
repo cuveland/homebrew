@@ -1,63 +1,52 @@
-require 'formula'
-
-class LibrawDemosaicGPL2 < Formula
-  url 'http://www.libraw.org/data/LibRaw-demosaic-pack-GPL2-0.14.0.tar.gz'
-  sha1 '7bd82e7aa531fa2ae53864b5d4613e4000645b14'
-end
-
-class LibrawDemosaicGPL3 < Formula
-  url 'http://www.libraw.org/data/LibRaw-demosaic-pack-GPL3-0.14.0.tar.gz'
-  sha1 'a51410732f8c8485b250b5de742b77dc2616a743'
-end
-
 class Libraw < Formula
-  url 'http://www.libraw.org/data/LibRaw-0.14.0.tar.gz'
-  homepage 'http://www.libraw.org/'
-  sha1 '8656af58fa2df52a671ab9864a6c1f862f2948d5'
+  homepage "http://www.libraw.org/"
+  url "http://www.libraw.org/data/LibRaw-0.16.0.tar.gz"
+  sha1 "492239aa209b1ddd1f030da4fc2978498c32a29b"
 
-  depends_on 'little-cms'
-
-  def install
-    d = Pathname.getwd.dirname
-    LibrawDemosaicGPL2.new.brew { d.install Dir['*'] }
-    LibrawDemosaicGPL3.new.brew { d.install Dir['*'] }
-
-    system "./configure", "--prefix=#{prefix}",
-                          "--disable-dependency-tracking",
-                          "--enable-demosaic-pack-gpl2=#{d}",
-                          "--enable-demosaic-pack-gpl3=#{d}"
-    system "make"
-    system "make install"
-    doc.install Dir['doc/*']
-    (prefix+'samples').mkpath
-    (prefix+'samples').install Dir['samples/*']
+  bottle do
+    cellar :any
+    sha1 "49b78411b56fbf825d5170fadb9e81cc0473ab11" => :yosemite
+    sha1 "af54b03cb2b500969ede436f0c15e282b89e8968" => :mavericks
+    sha1 "d527170bd8c1e2bc8b0d755ba69938c4f0cec335" => :mountain_lion
   end
 
-  def test
-    mktemp do
-      netraw = "http://www.rawsamples.ch/raws/nikon/d1/RAW_NIKON_D1.NEF"
-      localraw = "#{HOMEBREW_CACHE}/Formula/RAW_NIKON_D1.NEF"
-      if File.exists? localraw
-        system "#{HOMEBREW_PREFIX}/bin/raw-identify -u #{localraw}"
-        system "#{HOMEBREW_PREFIX}/bin/simple_dcraw -v -T #{localraw}"
-        system "/usr/bin/qlmanage -p #{localraw}.tiff >& /dev/null &"
-      else
-        puts ""
-        opoo <<-EOS.undent
-          A good test that uses libraw.dylib to open and convert a RAW image
-          to tiff was delayed until the RAW test image from the Internet is in your
-          cache. To download that image and run the test, simply type
+  depends_on "pkg-config" => :build
+  depends_on "jasper"
+  depends_on "little-cms2"
 
-             brew fetch #{netraw}
-             brew test libraw
+  resource "librawtestfile" do
+    url "http://www.rawsamples.ch/raws/nikon/d1/RAW_NIKON_D1.NEF",
+      :using => :nounzip
+    sha1 "d84d47caeb8275576b1c7c4550263de21855cf42"
+  end
 
-          It's a fairly small image, 4 MB, that takes less time to download than
-          read this.  Please ignore the harmless message from brew fetch about
-          No Available Formula.  Brew fetch works correctly as does this well
-          written software.
+  resource "gpl2" do
+    url "http://www.libraw.org/data/LibRaw-demosaic-pack-GPL2-0.16.0.tar.gz"
+    sha1 "af4959b111e8cd927c3a23cca5ad697521fae3d2"
+  end
 
-        EOS
-      end
+  resource "gpl3" do
+    url "http://www.libraw.org/data/LibRaw-demosaic-pack-GPL3-0.16.0.tar.gz"
+    sha1 "8a709ae35e7a040b78ffb6b9d21faab25f7146cb"
+  end
+
+  def install
+    %w(gpl2 gpl3).each {|f| (buildpath/f).install resource(f)}
+    system "./configure", "--prefix=#{prefix}",
+                          "--disable-dependency-tracking",
+                          "--enable-demosaic-pack-gpl2=#{buildpath}/gpl2",
+                          "--enable-demosaic-pack-gpl3=#{buildpath}/gpl3"
+    system "make"
+    system "make", "install"
+    doc.install Dir["doc/*"]
+    prefix.install "samples"
+  end
+
+  test do
+    resource("librawtestfile").stage do
+      filename = "RAW_NIKON_D1.NEF"
+      system "#{bin}/raw-identify", "-u", filename
+      system "#{bin}/simple_dcraw", "-v", "-T", filename
     end
   end
 end

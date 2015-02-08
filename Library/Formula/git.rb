@@ -1,82 +1,153 @@
-require 'formula'
-
-class GitManuals < Formula
-  url 'http://kernel.org/pub/software/scm/git/git-manpages-1.7.6.1.tar.bz2'
-  mirror 'http://www.mirrorservice.org/sites/ftp.kernel.org/pub/software/scm/git/git-manpages-1.7.6.1.tar.bz2'
-  md5 'cae559424a62507cb2c15252d85a158e'
-end
-
-class GitHtmldocs < Formula
-  url 'http://kernel.org/pub/software/scm/git/git-htmldocs-1.7.6.1.tar.bz2'
-  mirror 'http://www.mirrorservice.org/sites/ftp.kernel.org/pub/software/scm/git/git-htmldocs-1.7.6.1.tar.bz2'
-  md5 'f698e0abbf1555582e30320930391c59'
-end
-
 class Git < Formula
-  url 'http://kernel.org/pub/software/scm/git/git-1.7.6.1.tar.bz2'
-  mirror 'http://www.mirrorservice.org/sites/ftp.kernel.org/pub/software/scm/git/git-1.7.6.1.tar.bz2'
-  md5 'd1e00772cc9dc6c571999feb9e8771ab'
-  homepage 'http://git-scm.com'
+  homepage "http://git-scm.com"
+  url "https://www.kernel.org/pub/software/scm/git/git-2.3.0.tar.gz"
+  sha256 "ba2fe814e709a5d0f034ebe82083fce7feed0899b3a8c8b3adf1c5a85d1ce9ac"
 
-  def options
-    [['--with-blk-sha1', 'compile with the optimized SHA1 implementation']]
+  head "https://github.com/git/git.git", :shallow => false
+
+  bottle do
+    sha1 "53177456ab367faa30e1d49104e8e2c065ac5613" => :yosemite
+    sha1 "549b0d4155ad0ca02edb0a55599006da32b21e00" => :mavericks
+    sha1 "78f9b2bfcdfe7e7d356cc4020df4ec41217f6e25" => :mountain_lion
+  end
+
+  resource "man" do
+    url "https://www.kernel.org/pub/software/scm/git/git-manpages-2.3.0.tar.gz"
+    sha256 "8aa4d1e5d7bbf5641a9de92279369d9b20cc266ba7b2888104efa40e80b53559"
+  end
+
+  resource "html" do
+    url "https://www.kernel.org/pub/software/scm/git/git-htmldocs-2.3.0.tar.gz"
+    sha256 "f8edf1547d3fd4e7e820dd2fad1b92eaae6335c993c26e4b03989ea3941d8441"
+  end
+
+  option "with-blk-sha1", "Compile with the block-optimized SHA1 implementation"
+  option "without-completions", "Disable bash/zsh completions from 'contrib' directory"
+  option "with-brewed-openssl", "Build with Homebrew OpenSSL instead of the system version"
+  option "with-brewed-curl", "Use Homebrew's version of cURL library"
+  option "with-brewed-svn", "Use Homebrew's version of SVN"
+  option "with-persistent-https", "Build git-remote-persistent-https from 'contrib' directory"
+
+  depends_on "pcre" => :optional
+  depends_on "gettext" => :optional
+  depends_on "openssl" if build.with? "brewed-openssl"
+  depends_on "curl" if build.with? "brewed-curl"
+  depends_on "go" => :build if build.with? "persistent-https"
+  # Trigger an install of swig before subversion, as the "swig" doesn't get pulled in otherwise
+  # See https://github.com/Homebrew/homebrew/issues/34554
+  if build.with? "brewed-svn"
+    depends_on "swig"
+    depends_on "subversion" => "with-perl"
   end
 
   def install
     # If these things are installed, tell Git build system to not use them
-    ENV['NO_FINK']='1'
-    ENV['NO_DARWIN_PORTS']='1'
-    # If local::lib is used you get a 'Only one of PREFIX or INSTALL_BASE can be given' error
-    ENV['PERL_MM_OPT']=''
-    # Build verbosely.
-    ENV['V']='1'
+    ENV["NO_FINK"] = "1"
+    ENV["NO_DARWIN_PORTS"] = "1"
+    ENV["V"] = "1" # build verbosely
+    ENV["NO_R_TO_GCC_LINKER"] = "1" # pass arguments to LD correctly
+    ENV["PYTHON_PATH"] = which "python"
+    ENV["PERL_PATH"] = which "perl"
 
-    # Clean XCode 4.x installs don't include Perl MakeMaker
-    ENV['NO_PERL_MAKEMAKER']='1' if MacOS.lion?
+    perl_version = /\d\.\d+/.match(`perl --version`)
 
-    ENV['BLK_SHA1']='YesPlease' if ARGV.include? '--with-blk-sha1'
-
-    inreplace "Makefile" do |s|
-      s.remove_make_var! %w{CFLAGS LDFLAGS}
+    if build.with? "brewed-svn"
+      ENV["PERLLIB_EXTRA"] = "#{Formula["subversion"].prefix}/Library/Perl/#{perl_version}/darwin-thread-multi-2level"
+    elsif MacOS.version >= :mavericks
+      ENV["PERLLIB_EXTRA"] = %W{
+        #{MacOS.active_developer_dir}
+        /Library/Developer/CommandLineTools
+        /Applications/Xcode.app/Contents/Developer
+      }.uniq.map { |p|
+        "#{p}/Library/Perl/#{perl_version}/darwin-thread-multi-2level"
+      }.join(":")
     end
 
-    system "make", "prefix=#{prefix}", "install"
-
-    # Install the Git bash completion file.
-    # Put it into the Cellar so that it gets upgraded along with git upgrades.
-    (prefix+'etc/bash_completion.d').install 'contrib/completion/git-completion.bash'
-
-    # Install emacs support.
-    (share+'doc/git-core/contrib').install 'contrib/emacs'
-    # Some people like the stuff in the contrib folder
-    (share/:git).install 'contrib'
-
-    # These files are exact copies of the git binary, so like the contents
-    # of libexec/git-core lets hard link them.
-    # I am assuming this is an overisght by the git devs.
-    git_md5 = (bin+'git').md5
-    %w[git-receive-pack git-upload-archive].each do |fn|
-      fn = bin + fn
-      next unless git_md5 == fn.md5
-      fn.unlink
-      fn.make_link bin+'git'
+    unless quiet_system ENV["PERL_PATH"], "-e", "use ExtUtils::MakeMaker"
+      ENV["NO_PERL_MAKEMAKER"] = "1"
     end
+
+    ENV["BLK_SHA1"] = "1" if build.with? "blk-sha1"
+
+    if build.with? "pcre"
+      ENV["USE_LIBPCRE"] = "1"
+      ENV["LIBPCREDIR"] = Formula["pcre"].opt_prefix
+    end
+
+    ENV["NO_GETTEXT"] = "1" if build.without? "gettext"
+
+    ENV["GIT_DIR"] = cached_download/".git" if build.head?
+
+    system "make", "prefix=#{prefix}",
+                   "sysconfdir=#{etc}",
+                   "CC=#{ENV.cc}",
+                   "CFLAGS=#{ENV.cflags}",
+                   "LDFLAGS=#{ENV.ldflags}",
+                   "install"
+
+    # Install the OS X keychain credential helper
+    cd "contrib/credential/osxkeychain" do
+      system "make", "CC=#{ENV.cc}",
+                     "CFLAGS=#{ENV.cflags}",
+                     "LDFLAGS=#{ENV.ldflags}"
+      bin.install "git-credential-osxkeychain"
+      system "make", "clean"
+    end
+
+    # Install git-subtree
+    cd "contrib/subtree" do
+      system "make", "CC=#{ENV.cc}",
+                     "CFLAGS=#{ENV.cflags}",
+                     "LDFLAGS=#{ENV.ldflags}"
+      bin.install "git-subtree"
+    end
+
+    if build.with? "persistent-https"
+      cd "contrib/persistent-https" do
+        system "make"
+        bin.install "git-remote-persistent-http",
+                    "git-remote-persistent-https",
+                    "git-remote-persistent-https--proxy"
+      end
+    end
+
+    if build.with? "completions"
+      # install the completion script first because it is inside "contrib"
+      bash_completion.install "contrib/completion/git-completion.bash"
+      bash_completion.install "contrib/completion/git-prompt.sh"
+
+      zsh_completion.install "contrib/completion/git-completion.zsh" => "_git"
+      cp "#{bash_completion}/git-completion.bash", zsh_completion
+    end
+
+    (share+"git-core").install "contrib"
 
     # We could build the manpages ourselves, but the build process depends
     # on many other packages, and is somewhat crazy, this way is easier.
-    GitManuals.new.brew { man.install Dir['*'] }
-    GitHtmldocs.new.brew { (share+'doc/git-doc').install Dir['*'] }
+    man.install resource("man")
+    (share+"doc/git-doc").install resource("html")
+
+    # Make html docs world-readable
+    chmod 0644, Dir["#{share}/doc/git-doc/**/*.{html,txt}"]
+    chmod 0755, Dir["#{share}/doc/git-doc/{RelNotes,howto,technical}"]
+
+    # To avoid this feature hooking into the system OpenSSL, remove it.
+    # If you need it, install git --with-brewed-openssl.
+    rm "#{libexec}/git-core/git-imap-send" if build.without? "brewed-openssl"
   end
 
   def caveats; <<-EOS.undent
-    Bash completion has been installed to:
-      #{etc}/bash_completion.d
+    The OS X keychain credential helper has been installed to:
+      #{HOMEBREW_PREFIX}/bin/git-credential-osxkeychain
 
-    Emacs support has been installed to:
-      #{HOMEBREW_PREFIX}/share/doc/git-core/contrib/emacs
-
-    The rest of the "contrib" is installed to:
-      #{HOMEBREW_PREFIX}/share/git/contrib
+    The "contrib" directory has been installed to:
+      #{HOMEBREW_PREFIX}/share/git-core/contrib
     EOS
+  end
+
+  test do
+    HOMEBREW_REPOSITORY.cd do
+      assert_equal "bin/brew", `#{bin}/git ls-files -- bin`.strip
+    end
   end
 end

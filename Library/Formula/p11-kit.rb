@@ -1,42 +1,31 @@
-require 'formula'
-
 class P11Kit < Formula
-  url 'http://p11-glue.freedesktop.org/releases/p11-kit-0.6.tar.gz'
-  homepage 'http://p11-glue.freedesktop.org'
-  md5 'c1ff3e52f172fda8bf3b426f7fb63c92'
+  homepage "http://p11-glue.freedesktop.org"
+  url "http://p11-glue.freedesktop.org/releases/p11-kit-0.18.4.tar.gz"
+  sha256 "df5424ec39e17c2b3b98819bf772626e9b8c73871a8b82e54151f6297d8575fd"
 
-  def patches
-    # Patch to get PATH_MAX; fixed upstream:
-    # http://cgit.freedesktop.org/p11-glue/p11-kit/commit/?id=8054865
-    DATA
+  bottle do
+    sha1 "1f75969e6cbf89921ba4d205e093c6d7bddd755e" => :yosemite
+    sha1 "4baec782e0d55aacb458bcd752d32f4d63de4424" => :mavericks
+    sha1 "1f16ca29e9c9b38ec832ce04c3802d439c2ba896" => :mountain_lion
   end
+
+  option :universal
+
+  depends_on "pkg-config" => :build
+  depends_on "libtasn1"
 
   def install
-    ENV.universal_binary
+    ENV.universal_binary if build.universal?
     system "./configure", "--disable-debug",
                           "--disable-dependency-tracking",
-                          "--prefix=#{prefix}"
+                          "--prefix=#{prefix}",
+                          "--disable-trust-module"
     system "make"
-    system "make check"
-    system "make install"
+    system "make", "check"
+    system "make", "install"
+  end
+
+  test do
+    system "#{bin}/p11-kit", "list-modules"
   end
 end
-
-__END__
-diff --git a/p11-kit/modules.c b/p11-kit/modules.c
-index 3f1eae1..4c87cee 100644
---- a/p11-kit/modules.c
-+++ b/p11-kit/modules.c
-@@ -50,11 +50,12 @@
- #include <dirent.h>
- #include <dlfcn.h>
- #include <errno.h>
-+#include <limits.h>
- #include <pthread.h>
- #include <stdarg.h>
- #include <stddef.h>
--#include <stdlib.h>
- #include <stdio.h>
-+#include <stdlib.h>
- #include <string.h>
- #include <unistd.h>

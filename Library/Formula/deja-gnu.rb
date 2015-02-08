@@ -1,17 +1,23 @@
-require 'formula'
-
 class DejaGnu < Formula
-  url 'http://ftpmirror.gnu.org/dejagnu/dejagnu-1.5.tar.gz'
-  homepage 'http://www.gnu.org/software/dejagnu/'
-  md5 '3df1cbca885e751e22d3ebd1ac64dc3c'
-  head 'git://git.sv.gnu.org/dejagnu.git'
+  homepage "https://www.gnu.org/software/dejagnu/"
+  url "http://ftpmirror.gnu.org/dejagnu/dejagnu-1.5.2.tar.gz"
+  mirror "https://ftp.gnu.org/gnu/dejagnu/dejagnu-1.5.2.tar.gz"
+  sha1 "20a6c64e8165c1e6dbbe3638c4f737859942c94d"
+
+  head "http://git.sv.gnu.org/r/dejagnu.git"
 
   def install
     ENV.j1 # Or fails on Mac Pro
-    system "./configure", "--disable-debug", "--disable-dependency-tracking",
-                          "--prefix=#{prefix}", "--mandir=#{man}"
-    # DejaGnu has no compiled code, so go directly to 'make check'
-    system "make check"
-    system "make install"
+    system "./configure", "--disable-debug",
+                          "--disable-dependency-tracking",
+                          "--prefix=#{prefix}",
+                          "--mandir=#{man}"
+    # DejaGnu has no compiled code, so go directly to "make check"
+    system "make", "check"
+    system "make", "install"
+  end
+
+  test do
+    system "#{bin}/runtest"
   end
 end

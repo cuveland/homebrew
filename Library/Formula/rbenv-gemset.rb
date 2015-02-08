@@ -1,20 +1,17 @@
-require 'formula'
-
 class RbenvGemset < Formula
-  url 'https://github.com/jamis/rbenv-gemset/tarball/v0.2.1'
-  homepage 'https://github.com/jamis/rbenv-gemset'
-  md5 '21d6a809ea2232164a570b1fff13e8e4'
+  homepage "https://github.com/jf/rbenv-gemset"
+  url "https://github.com/jf/rbenv-gemset/archive/v0.5.8.tar.gz"
+  sha1 "bd06efff2fcfaeb47bd32dc1658e4aae5d8a0619"
 
-  depends_on 'rbenv'
+  head "https://github.com/jf/rbenv-gemset.git"
+
+  depends_on "rbenv"
 
   def install
-    prefix.install Dir['*']
+    prefix.install Dir["*"]
   end
 
-  def caveats; <<-EOS.undent
-    Run the following command to complete the installation of rbenv-gemset:
-
-        rbenv gemset install
-    EOS
+  test do
+    assert shell_output("rbenv hooks exec").include? "gemset.bash"
   end
 end

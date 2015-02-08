@@ -1,97 +1,119 @@
 require 'formula'
 
-def build_tests?; ARGV.include? '--test'; end
-
 class Glib < Formula
-  homepage 'http://developer.gnome.org/glib/2.28/'
-  url 'ftp://ftp.gnome.org/pub/gnome/sources/glib/2.28/glib-2.28.8.tar.bz2'
-  sha256 '222f3055d6c413417b50901008c654865e5a311c73f0ae918b0a9978d1f9466f'
+  homepage "http://developer.gnome.org/glib/"
+  url "http://ftp.gnome.org/pub/gnome/sources/glib/2.42/glib-2.42.1.tar.xz"
+  sha256 "8f3f0865280e45b8ce840e176ef83bcfd511148918cc8d39df2ee89b67dcf89a"
 
+  bottle do
+    sha1 "4e6e2a4663a87d696be3d307b97451507f048b65" => :yosemite
+    sha1 "1657da82e99bb5ebf50cb54a7daa5f08b5fc32e8" => :mavericks
+    sha1 "2d71dde5c704e9ce585d0d71b733360e494c10e5" => :mountain_lion
+  end
+
+  option :universal
+  option 'test', 'Build a debug build and run tests. NOTE: Not all tests succeed yet'
+  option 'with-static', 'Build glib with a static archive.'
+
+  depends_on 'pkg-config' => :build
   depends_on 'gettext'
+  depends_on 'libffi'
 
-  fails_with_llvm "Undefined symbol errors while linking" unless MacOS.lion?
-
-  # Lion and Snow Leopard don't have a 64 bit version of the iconv_open
-  # function. The fact that Lion still doesn't is ridiculous. But we're as
-  # much to blame. Nobody reported the bug FFS. And I'm still not going to
-  # because I'm in a hurry here.
-  depends_on 'libiconv'
-
-  def patches
-    mp = "https://svn.macports.org/repository/macports/trunk/dports/devel/glib2/files/"
-    {
-      :p0 => [
-        mp+"patch-configure.ac.diff",
-        mp+"patch-glib-2.0.pc.in.diff",
-        mp+"patch-glib_gunicollate.c.diff",
-        mp+"patch-gi18n.h.diff",
-        mp+"patch-gio_xdgmime_xdgmime.c.diff",
-        mp+"patch-gio_gdbusprivate.c.diff"
-      ]
-    }
+  fails_with :llvm do
+    build 2334
+    cause "Undefined symbol errors while linking"
   end
 
-  def options
-  [
-    ['--universal', 'Build universal binaries.'],
-    ['--test', 'Build a debug build and run tests. NOTE: Tests may hang on "unix-streams".']
-  ]
+  resource 'config.h.ed' do
+    url 'https://trac.macports.org/export/111532/trunk/dports/devel/glib2/files/config.h.ed'
+    version '111532'
+    sha1 '0926f19d62769dfd3ff91a80ade5eff2c668ec54'
   end
+
+  # https://bugzilla.gnome.org/show_bug.cgi?id=673135 Resolved as wontfix,
+  # but needed to fix an assumption about the location of the d-bus machine
+  # id file.
+  patch do
+    url "https://gist.githubusercontent.com/jacknagel/af332f42fae80c570a77/raw/7b5fd0d2e6554e9b770729fddacaa2d648327644/glib-hardcoded-paths.diff"
+    sha1 "78bbc0c7349d7bfd6ab1bfeabfff27a5dfb1825a"
+  end
+
+  # Fixes compilation with FSF GCC. Doesn't fix it on every platform, due
+  # to unrelated issues in GCC, but improves the situation.
+  # Patch submitted upstream: https://bugzilla.gnome.org/show_bug.cgi?id=672777
+  patch do
+    url "https://gist.githubusercontent.com/jacknagel/9835034/raw/371fd57f7d3823c67dbd5bc738df7ef5ffc7545f/gio.patch"
+    sha1 "b947912a4f59630c13e53056c8b18bde824860f4"
+  end
+
+  patch do
+    url "https://gist.githubusercontent.com/jacknagel/9726139/raw/bc60b41fa23ae72f56128e16c9aa5d2d26c75c11/universal.patch"
+    sha1 "ab9b8ba9d7c3fd493a0e24638a95e26f3fe613ac"
+  end if build.universal?
 
   def install
-    ENV.universal_binary if ARGV.build_universal?
+    ENV.universal_binary if build.universal?
 
-    # indeed, amazingly, -w causes gcc to emit spurious errors for this package!
-    ENV.enable_warnings
+    inreplace %w[gio/gdbusprivate.c gio/xdgmime/xdgmime.c glib/gutils.c],
+      "@@HOMEBREW_PREFIX@@", HOMEBREW_PREFIX
 
-    args = ["--disable-dependency-tracking", "--disable-rebuilds",
-            "--prefix=#{prefix}",
-            "--with-libiconv=gnu",
-            "--disable-dtrace"]
+    # Disable dtrace; see https://trac.macports.org/ticket/30413
+    args = %W[
+      --disable-maintainer-mode
+      --disable-dependency-tracking
+      --disable-silent-rules
+      --disable-dtrace
+      --disable-libelf
+      --prefix=#{prefix}
+      --localstatedir=#{var}
+      --with-gio-module-dir=#{HOMEBREW_PREFIX}/lib/gio/modules
+    ]
 
-    args << "--disable-debug" unless build_tests?
-
-    if ARGV.build_universal?
-      # autoconf 2.61 is fine don't worry about it
-      inreplace ["aclocal.m4", "configure.ac"] do |s|
-        s.gsub! "AC_PREREQ([2.62])", "AC_PREREQ([2.61])"
-      end
-
-      # Run autoconf so universal builds will work
-      system "autoconf"
-    end
-
-    # hack so that we don't have to depend on pkg-config
-    # http://permalink.gmane.org/gmane.comp.package-management.pkg-config/627
-    ENV['ZLIB_CFLAGS'] = ''
-    ENV['ZLIB_LIBZ'] = '-l'
+    args << '--enable-static' if build.with? 'static'
 
     system "./configure", *args
 
-    # Fix for 64-bit support, from MacPorts
-    curl "https://svn.macports.org/repository/macports/trunk/dports/devel/glib2/files/config.h.ed", "-O"
-    system "ed - config.h < config.h.ed"
+    if build.universal?
+      buildpath.install resource('config.h.ed')
+      system "ed -s - config.h <config.h.ed"
+    end
 
     system "make"
-    # Supress a folder already exists warning during install
-    # Also needed for running tests
-    ENV.j1
-    system "make test" if build_tests?
+    # the spawn-multithreaded tests require more open files
+    system "ulimit -n 1024; make check" if build.include? 'test'
     system "make install"
 
-    # This sucks; gettext is Keg only to prevent conflicts with the wider
-    # system, but pkg-config or glib is not smart enough to have determined
-    # that libintl.dylib isn't in the DYLIB_PATH so we have to add it
-    # manually.
-    gettext = Formula.factory('gettext')
+    # `pkg-config --libs glib-2.0` includes -lintl, and gettext itself does not
+    # have a pkgconfig file, so we add gettext lib and include paths here.
+    gettext = Formula["gettext"].opt_prefix
     inreplace lib+'pkgconfig/glib-2.0.pc' do |s|
       s.gsub! 'Libs: -L${libdir} -lglib-2.0 -lintl',
-              "Libs: -L${libdir} -lglib-2.0 -L#{gettext.lib} -lintl"
-
+              "Libs: -L${libdir} -lglib-2.0 -L#{gettext}/lib -lintl"
       s.gsub! 'Cflags: -I${includedir}/glib-2.0 -I${libdir}/glib-2.0/include',
-              "Cflags: -I${includedir}/glib-2.0 -I${libdir}/glib-2.0/include -I#{gettext.include}"
+              "Cflags: -I${includedir}/glib-2.0 -I${libdir}/glib-2.0/include -I#{gettext}/include"
     end
 
     (share+'gtk-doc').rmtree
+  end
+
+  test do
+    (testpath/'test.c').write <<-EOS.undent
+      #include <string.h>
+      #include <glib.h>
+
+      int main(void)
+      {
+          gchar *result_1, *result_2;
+          char *str = "string";
+
+          result_1 = g_convert(str, strlen(str), "ASCII", "UTF-8", NULL, NULL, NULL);
+          result_2 = g_convert(result_1, strlen(result_1), "UTF-8", "ASCII", NULL, NULL, NULL);
+
+          return (strcmp(str, result_2) == 0) ? 0 : 1;
+      }
+      EOS
+    flags = ["-I#{include}/glib-2.0", "-I#{lib}/glib-2.0/include", "-lglib-2.0"]
+    system ENV.cc, "-o", "test", "test.c", *(flags + ENV.cflags.to_s.split)
+    system "./test"
   end
 end

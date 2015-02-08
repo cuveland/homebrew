@@ -1,21 +1,18 @@
-require 'formula'
-
-# Require ec2-api-tools to get the base class
-require "#{File.dirname __FILE__}/ec2-api-tools.rb"
-
 class AwsElasticache < AmazonWebServicesFormula
-  homepage 'http://aws.amazon.com/developertools/2310261897259567'
-  url 'https://s3.amazonaws.com/elasticache-downloads/AmazonElastiCacheCli-2011-07-15-1.5.000.zip'
-  version '1.5.0'
-  md5 '68581c62ef0a820f12294415c60fe45f'
+  homepage "https://aws.amazon.com/developertools/2310261897259567"
+  url "https://s3.amazonaws.com/elasticache-downloads/AmazonElastiCacheCli-2014-09-30-1.12.000.zip"
+  version "1.12.000"
+  sha1 "aeed292beada4aabe7d88562af0f1353556c0767"
 
-  depends_on 'ec2-api-tools'
-
-  def install
-    standard_install
-  end
+  depends_on "ec2-api-tools"
 
   def caveats
     standard_instructions "AWS_ELASTICACHE_HOME"
+  end
+
+  test do
+    ENV["JAVA_HOME"] = `/usr/libexec/java_home`.chomp
+    ENV["AWS_ELASTICACHE_HOME"] = libexec
+    system "#{bin}/elasticache-version"
   end
 end

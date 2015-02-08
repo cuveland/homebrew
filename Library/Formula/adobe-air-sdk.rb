@@ -1,24 +1,30 @@
-require 'formula'
+require "formula"
 
+# Find downloads at:
+# https://helpx.adobe.com/air/kb/archived-air-sdk-version.html
 class AdobeAirSdk < Formula
-  url 'http://airdownload.adobe.com/air/mac/download/2.7/AdobeAIRSDK.tbz2'
-  homepage 'http://www.adobe.com/products/air/sdk/'
-  md5 'f93c8a540a6db24509b4fbaddf2f1770'
-  version '2.7'
+  homepage "http://adobe.com/products/air/sdk"
+  version "16.0.0.272"
 
-  def startup_script name
-    <<-EOS.undent
-      #!/bin/bash
-      exec #{libexec}/bin/#{name} $@
-    EOS
+  option "with-flex-support", "Do not download the new compiler with the SDK."
+
+  if build.without? "flex-support"
+    url "http://airdownload.adobe.com/air/mac/download/16.0/AIRSDK_Compiler.tbz2"
+    sha1 "ee487b3c0456ba825dd6af48682ba81802ef0300"
+  else
+    url "http://airdownload.adobe.com/air/mac/download/16.0/AdobeAIRSDK.tbz2"
+    sha1 "65b0bf2163cb99566484bbebc65d4cf8cb8af898"
   end
 
   def install
-    libexec.install Dir['*']
+    rm_f Dir["bin/*.bat"]
+    libexec.install Dir["*"]
+    bin.write_exec_script Dir["#{libexec}/bin/*"]
+  end
 
-    bin.mkpath
-    %w[adl adt].each do |tool|
-      (bin+tool).write startup_script(tool)
-    end
+  def caveats; <<-EOS.undent
+    To set AIR_HOME:
+      export AIR_HOME=#{libexec}
+    EOS
   end
 end

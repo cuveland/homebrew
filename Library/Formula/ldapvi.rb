@@ -1,27 +1,41 @@
-require 'formula'
+require "formula"
 
 class Ldapvi < Formula
-  url 'http://www.lichteblau.com/download/ldapvi-1.7.tar.gz'
-  homepage 'http://www.lichteblau.com/ldapvi/'
-  md5 '6dc2f5441ac5f1e2b5b036e3521012cc'
-
-  depends_on 'gettext'
-  depends_on 'glib'
-  depends_on 'popt'
-  depends_on 'readline'
-
-  def install
-    system "./configure", "--prefix=#{prefix}", "--disable-dependency-tracking"
-    system "make install"
+  homepage "http://www.lichteblau.com/ldapvi/"
+  url "http://www.lichteblau.com/download/ldapvi-1.7.tar.gz"
+  mirror "https://mirrors.kernel.org/debian/pool/main/l/ldapvi/ldapvi_1.7.orig.tar.gz"
+  sha1 "d1cde4cbb618180f9ae0e77c56a1520b8ad61c9a"
+  bottle do
+    cellar :any
+    sha1 "c87e30a0955bb200d8f88011ee8eec8291562b93" => :yosemite
+    sha1 "f3bd57a8d0ce4f7e19ade3cf051396169441bdcf" => :mavericks
+    sha1 "13d1720d60f6557a57214baa7622f7ffac889edc" => :mountain_lion
   end
+
+  revision 1
+
+  depends_on "pkg-config" => :build
+  depends_on "gettext"
+  depends_on "glib"
+  depends_on "popt"
+  depends_on "readline"
+  depends_on "openssl"
 
   # Backporting the fix from the devel version
   # (namespace conflict with Lion's getline function)
   # http://www.lichteblau.com/git/?p=ldapvi.git;a=commit;h=256ced029c235687bfafdffd07be7d47bf7af39b
-  def patches
-    DATA
+  # Also fix compilation with clang by changing `return` to `return 0`.
+  patch :DATA
+
+  def install
+    system "./configure", "--disable-dependency-tracking",
+                          "--prefix=#{prefix}"
+    system "make", "install"
   end
 
+  test do
+    system "#{bin}/ldapvi", "--version"
+  end
 end
 
 __END__
@@ -61,3 +75,14 @@ diff -rupN ldapvi-1.7-orig/misc.c ldapvi-1.7-new/misc.c
  {
  	tdialog d;
  	init_dialog(&d, DIALOG_DEFAULT, prompt, value);
+--- ldapvi-1.7/ldapvi.c 2012-08-15 10:58:23.000000000 -0400
++++ ldapvi-1.7/ldapvi.c.new     2012-08-15 10:58:12.000000000 -0400
+@@ -1465,7 +1465,7 @@
+ 	int line = 0;
+ 	int c;
+ 
+-	if (lstat(sasl, &st) == -1) return;
++	if (lstat(sasl, &st) == -1) return 0;
+ 	if ( !(in = fopen(sasl, "r"))) syserr();
+ 
+ 	if (st.st_size > 0) {

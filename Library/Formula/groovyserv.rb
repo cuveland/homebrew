@@ -1,30 +1,35 @@
-require 'formula'
+require "formula"
 
 class Groovyserv < Formula
-  homepage 'http://kobo.github.com/groovyserv/'
-  url 'https://github.com/downloads/kobo/groovyserv/groovyserv-0.9-src.zip'
-  sha1 '54464608f90a381b44cf7959136e1b1f31a3919c'
-  head 'https://github.com/kobo/groovyserv.git', :using => :git
+  homepage "http://kobo.github.io/groovyserv/"
+  url "https://bitbucket.org/kobo/groovyserv-mirror/downloads/groovyserv-1.0.0-src.zip"
+  sha1 "46b946dee3e40457e667498b235bd8e1567ed9ed"
+  head "https://github.com/kobo/groovyserv.git"
 
-  depends_on 'gradle' => :build
-  depends_on 'groovy'
+  bottle do
+    sha1 "2acd972802f63afcdebb622015ab059c23423789" => :yosemite
+    sha1 "b2cb34764f861b8ef374ead20bac89f1866d03d4" => :mavericks
+    sha1 "9936c0eadffe669dca07631c0609bc5a07968800" => :mountain_lion
+  end
+
+  depends_on "go" => :build
+
+  # This fix is upstream and can be removed in the next released version.
+  patch do
+    url "https://github.com/kobo/groovyserv/commit/4ea88fbfe940b50801be5e0b0bc84cd0ce627530.diff"
+    sha1 "2fe73bbed1778075a84dec43d462f69154cdb602"
+  end
 
   def install
-    system 'gradle clean executables'
+    system "./gradlew", "clean" "executables"
 
     # Install executables in libexec to avoid conflicts
-    Dir::chdir Dir['build/executables/'].first do
-      libexec.install %w{bin lib}
-    end
-    prefix.install %w{LICENSE.txt README.txt NOTICE.txt}
+    libexec.install Dir["build/executables/{bin,lib}"]
 
     # Remove windows files
     rm_f Dir["#{libexec}/bin/*.bat"]
 
-    # Symlink binaries
-    bin.mkpath
-    Dir["#{libexec}/bin/*"].each do |f|
-      ln_s f, bin + File.basename(f)
-    end
+    # Symlink binaries except _common.sh
+    bin.install_symlink Dir["#{libexec}/bin/g*"]
   end
 end

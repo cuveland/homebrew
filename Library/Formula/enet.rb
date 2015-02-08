@@ -1,12 +1,12 @@
 require 'formula'
 
 class Enet < Formula
-  url 'http://enet.bespin.org/download/enet-1.2.tar.gz'
   homepage 'http://enet.bespin.org'
-  md5 'e0d9f468d8c6f6bfd07083b3b40f5e69'
+  url 'http://enet.bespin.org/download/enet-1.3.11.tar.gz'
+  sha1 'f1b2e49aa2bbdd7d75e889f3f6d3b0c1a56b6080'
 
   def install
-    system "./configure", "--prefix=#{prefix}", "--disable-debug", "--disable-dependency-tracking"
+    system "./configure", "--disable-dependency-tracking", "--prefix=#{prefix}"
     system "make install"
   end
 end
